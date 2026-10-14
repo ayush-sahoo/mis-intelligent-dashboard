@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { TestContext } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -83,25 +84,32 @@ describe('Matrix Parser: Helpers & Normalisation', () => {
   });
 });
 
+// Real portfolio workbooks carry confidential company financials, so they are
+// never committed. They are read from a gitignored local directory instead.
+const SAMPLE_DIRS = ['/tmp/mis_samples', path.resolve(process.cwd(), 'uploads')];
+
 function getSampleFile(sub: string): string | null {
-  const sampleDir = '/tmp/mis_samples';
-  if (fs.existsSync(sampleDir)) {
-    const f = fs.readdirSync(sampleDir).find((x) => x.toLowerCase().includes(sub.toLowerCase()));
-    if (f) return path.join(sampleDir, f);
-  }
-  const uploadsDir = path.resolve(process.cwd(), 'uploads');
-  if (fs.existsSync(uploadsDir)) {
-    const f = fs.readdirSync(uploadsDir).find((x) => x.toLowerCase().includes(sub.toLowerCase()));
-    if (f) return path.join(uploadsDir, f);
+  for (const dir of SAMPLE_DIRS) {
+    if (!fs.existsSync(dir)) continue;
+    const f = fs.readdirSync(dir).find((x) => x.toLowerCase().includes(sub.toLowerCase()));
+    if (f) return path.join(dir, f);
   }
   return null;
 }
 
+// Skips the calling test when its workbook is absent, so a fresh clone or CI
+// checkout reports these as skipped rather than failing on a missing fixture.
+function requireSampleFile(t: TestContext, sub: string): string {
+  const file = getSampleFile(sub);
+  if (!file) {
+    t.skip(`${sub} workbook not found in ${SAMPLE_DIRS.join(' or ')}`);
+  }
+  return file;
+}
+
 describe('Matrix Parser: Real Portfolio Spreadsheets', () => {
-  it('parses Masterchow multi-block sheets with channel > category hierarchy and exact metric numbers', () => {
-    const file = getSampleFile('Masterchow_MIS_April_26');
-    expect(file).toBeTruthy();
-    if (!file) return;
+  it('parses Masterchow multi-block sheets with channel > category hierarchy and exact metric numbers', (t) => {
+    const file = requireSampleFile(t, 'Masterchow_MIS_April_26');
 
     const buf = fs.readFileSync(file);
     const result = parseMatrixSpreadsheet(buf, 'Masterchow_MIS_April_26.xlsx');
@@ -179,9 +187,8 @@ describe('Matrix Parser: Real Portfolio Spreadsheets', () => {
     expect(gmPercent?.unit).toBe('percent');
   });
 
-  it('parses Masterchow with Lakh scaling in P&L Summary and quarantines #DIV/0!', () => {
-    const file = getSampleFile('Masterchow_MIS_April_26');
-    if (!file) return;
+  it('parses Masterchow with Lakh scaling in P&L Summary and quarantines #DIV/0!', (t) => {
+    const file = requireSampleFile(t, 'Masterchow_MIS_April_26');
 
     const buf = fs.readFileSync(file);
     const result = parseMatrixSpreadsheet(buf, 'Fund_II_Masterchow_Masterchow_MIS_April_26.xlsx');
@@ -219,10 +226,8 @@ describe('Matrix Parser: Real Portfolio Spreadsheets', () => {
     expect(quarantined?.rawValue).toMatch(/^#/);
   });
 
-  it('parses Clinikk MIS Template_INR and preserves hierarchy', () => {
-    const file = getSampleFile('Clinikk_MIS_Mar_26');
-    expect(file, 'Clinikk fixture must be present in uploads/ or /tmp/mis_samples').toBeTruthy();
-    if (!file) return;
+  it('parses Clinikk MIS Template_INR and preserves hierarchy', (t) => {
+    const file = requireSampleFile(t, 'Clinikk_MIS_Mar_26');
 
     const buf = fs.readFileSync(file);
     const result = parseMatrixSpreadsheet(buf, 'Fund_I_Clinikk_Clinikk_MIS_Mar_26.xlsx');
@@ -247,10 +252,8 @@ describe('Matrix Parser: Real Portfolio Spreadsheets', () => {
     expect(childMetric?.parentLabel).toBeDefined();
   });
 
-  it('parses Fragaria single-period Actuals layout', () => {
-    const file = getSampleFile('Fragaria_MIS_Mar_26');
-    expect(file, 'Fragaria fixture must be present in uploads/ or /tmp/mis_samples').toBeTruthy();
-    if (!file) return;
+  it('parses Fragaria single-period Actuals layout', (t) => {
+    const file = requireSampleFile(t, 'Fragaria_MIS_Mar_26');
 
     const buf = fs.readFileSync(file);
     const result = parseMatrixSpreadsheet(buf, 'Fund_III_Fragaria_Fragaria_MIS_Mar_26.xlsx');
@@ -268,10 +271,8 @@ describe('Matrix Parser: Real Portfolio Spreadsheets', () => {
     expect(ebitdaMar26?.value).toBe(-1_647_441);
   });
 
-  it('parses Hectar Global USD fiscal year data', () => {
-    const file = getSampleFile('Hector_MIS_upto_Mar_26');
-    expect(file, 'Hectar fixture must be present in uploads/ or /tmp/mis_samples').toBeTruthy();
-    if (!file) return;
+  it('parses Hectar Global USD fiscal year data', (t) => {
+    const file = requireSampleFile(t, 'Hector_MIS_upto_Mar_26');
 
     const buf = fs.readFileSync(file);
     const result = parseMatrixSpreadsheet(buf, 'Fund_II_hectar_Hector_MIS_upto_Mar_26.xlsx');
@@ -284,10 +285,8 @@ describe('Matrix Parser: Real Portfolio Spreadsheets', () => {
     expect(ebitda?.currency).toBe('USD');
   });
 
-  it('parses Pratilipi 5.5 MB workbook and extracts Literature Platform Revenue', () => {
-    const file = getSampleFile('Pratilipi_MIS__Mar__26');
-    expect(file, 'Pratilipi fixture must be present in uploads/ or /tmp/mis_samples').toBeTruthy();
-    if (!file) return;
+  it('parses Pratilipi 5.5 MB workbook and extracts Literature Platform Revenue', (t) => {
+    const file = requireSampleFile(t, 'Pratilipi_MIS__Mar__26');
 
     const buf = fs.readFileSync(file);
     const result = parseMatrixSpreadsheet(buf, 'Fund_I_Pratilipi_Pratilipi_MIS__Mar__26.xlsx');
