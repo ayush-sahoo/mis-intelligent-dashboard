@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import type { TestContext } from 'vitest';
 import { NextRequest } from 'next/server';
 import { GET as listSessions, POST as createSession } from '../apps/web/src/app/api/chat/sessions/route.js';
 import {
@@ -8,6 +9,16 @@ import {
 } from '../apps/web/src/app/api/chat/sessions/[id]/route.js';
 import { signSession } from '../apps/web/src/lib/auth.js';
 import { SESSION_COOKIE_NAME } from '../apps/web/src/lib/constants.js';
+
+// The tests below drive the route handlers against a live Postgres. Without
+// DATABASE_URL there is no database to reach, so they skip instead of failing
+// on a fresh clone or CI checkout. A DATABASE_URL that is set but unreachable
+// still fails loudly: that is a broken environment, not a missing one.
+function requireDatabase(t: TestContext): void {
+  if (!process.env.DATABASE_URL) {
+    t.skip('DATABASE_URL is not set — no Postgres to run the session lifecycle against');
+  }
+}
 
 describe('Chat Sessions API: /api/chat/sessions', () => {
   let validToken: string;
@@ -32,7 +43,9 @@ describe('Chat Sessions API: /api/chat/sessions', () => {
     expect(resPost.status).toBe(401);
   });
 
-  it('creates, reads, patches, and deletes a chat session with full lifecycle', async () => {
+  it('creates, reads, patches, and deletes a chat session with full lifecycle', async (t) => {
+    requireDatabase(t);
+
     // 1. Create a new session with default title 'New chat'
     const createReq = new NextRequest('http://localhost:3000/api/chat/sessions', {
       method: 'POST',
@@ -147,7 +160,9 @@ describe('Chat Sessions API: /api/chat/sessions', () => {
     expect(errBody.error.code).toBe('NOT_FOUND');
   });
 
-  it('returns 404 for non-existent session UUID on GET, PATCH, DELETE', async () => {
+  it('returns 404 for non-existent session UUID on GET, PATCH, DELETE', async (t) => {
+    requireDatabase(t);
+
     const nonExistentId = '00000000-0000-0000-0000-000000000000';
     const req = new NextRequest(`http://localhost:3000/api/chat/sessions/${nonExistentId}`, {
       headers: { cookie: `${SESSION_COOKIE_NAME}=${validToken}` },
